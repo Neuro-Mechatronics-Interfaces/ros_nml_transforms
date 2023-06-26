@@ -59,7 +59,10 @@ python -m pytest path/to/ros_nml_transforms/test/test_ros_nml_transforms.py
 Perhaps the best way to introduce the package and task is via an example.
 -->
 
+## Additional information
 
+* The node currently implements [attractor](doc/markdown/attractor.md) 
+  functionality.
 
 ## License
 
