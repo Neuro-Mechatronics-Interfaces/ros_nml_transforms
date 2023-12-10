@@ -25,6 +25,8 @@ Transforms are particularly relevant to the Force Dimension robot. For
 example, one transform converts the current robot effector position into a 
 position in the coordinate system of a task / GUI space.
 
+The packages also handles multiple input channels of force commands. For example, one force input can be used for simulating collisions when the robot end effector position is colliding with an object while another input is used to simulate a viscous fluid or rough surface.
+
 ## Installation
 
 This package can be added to any [ROS2 workspace]. ROS2 workspaces are built 
@@ -66,10 +68,11 @@ Perhaps the best way to introduce the package and task is via an example.
 
 ## License
 
-Copyright 2022-2023 [Neuromechatronics Lab], Carnegie Mellon University
+Copyright 2023-2024 [Neuromechatronics Lab], Carnegie Mellon University
 
 Contributors: 
-* a. whit. (nml@whit.contact)
+* Andrew Whitford (nml@whit.contact)
+* Jonathan Shulgach (jshulgac@andrew.cmu.edu)
 
 This Source Code Form is subject to the terms of the Mozilla Public
 License, v. 2.0. If a copy of the MPL was not distributed with this
