@@ -22,6 +22,9 @@ setup(
         'console_scripts': [
             'node = ros_nml_transforms.node:main',
             'attractor_node = ros_nml_transforms.attractor_node:main',
+            'wrist_manip_node = ros_nml_transforms.wrist_manip_node:main',
+            'blocks_node = ros_nml_transforms.blocks_node:main',
+            'rom_node = ros_nml_transforms.range_of_motion:main',
         ],
     },
 )

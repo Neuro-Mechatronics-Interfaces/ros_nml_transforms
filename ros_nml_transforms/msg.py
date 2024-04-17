@@ -13,4 +13,5 @@
 from geometry_msgs.msg import Point as position_message
 from geometry_msgs.msg import Vector3 as force_message
 from geometry_msgs.msg import Vector3 as velocity_message
-
+from geometry_msgs.msg import Pose as pose_message
+from haptic_device_interfaces.msg import Sigma7 as sigma7_message

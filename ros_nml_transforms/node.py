@@ -29,6 +29,9 @@ import rosidl_runtime_py
 # Local imports.
 from ros_nml_transforms.msg import position_message
 from ros_nml_transforms.msg import force_message
+from ros_nml_transforms.msg import pose_message
+from ros_nml_transforms.msg import sigma7_message
+
 
 
 # Declare default quality-of-service settings for ROS2.
@@ -45,18 +48,22 @@ class Node(rclpy.node.Node):
                        **kwargs):
         super().__init__(*args, node_name=node_name, **kwargs)
         
-        self.current_effector_position = position_message()
+        self.current_pose = None
+
         self.initialize_parameters()
-
-        # Initializing list to store N force inputs
-        self.N_inputs = self.get_parameter('n_force_inputs').value
-        self.force_cmd = [[0.0, 0.0, 0.0] for _ in range(self.N_inputs)]  
-        self.verbose = verbose
-
         self.initialize_publishers()
         self.initialize_subscriptions()
-        
+
+        # Initializing list to store N force inputs
+        self.force_cmd = [[0.0, 0.0, 0.0] for _ in range(self.get_parameter('n_force_inputs').value)]
+        self.verbose = verbose
+
+
         self.logger("'{}' node created".format(node_name))
+        if self.get_parameter('use_wrist_orientation').value:
+            self.logger("Using wrist orientation for virtual agent movement transforms")
+        else:
+            self.logger("Traditional positional transforms set up.")
         
     def logger(self, msg=""):
         self.get_logger().info(msg)
@@ -66,10 +73,21 @@ class Node(rclpy.node.Node):
         default_transform = [+1.0, +0.0, +0.0,
                              +0.0, +1.0, +0.0,
                              +0.0, +0.0, +1.0]
-        self.declare_parameter('cursor.position_transform', default_transform)
-        self.declare_parameter('cursor.force_transform', default_transform)
-        self.declare_parameter('n_force_inputs', 2)
-        
+        self.declare_parameters(
+            namespace='',
+            parameters=[
+                ('cursor_pose_topic', '/cursor/position'),
+                ('robot_pose_topic', '/feedback/pose'),
+                ('force_command_topic', '/command/sigma7_force'),
+                ('use_nml_transforms_v1', False),
+                ('cursor.position_transform', default_transform),
+                ('cursor.force_transform', default_transform),
+                ('cursor.angular_transform', [+0.1, +0.1, +0.1]),
+                ('n_force_inputs', 2),
+                ('use_wrist_orientation', False),
+            ]
+        )
+
     def initialize_publishers(self):
         
         # Initialize a publisher for cursor position messages.
@@ -80,36 +98,37 @@ class Node(rclpy.node.Node):
         self.position_publisher = self.create_publisher(**kwargs)
         
         # Initialize a publisher for robot force messages.
-        kwargs = dict(topic='command/force',
-                      msg_type=force_message,
+        kwargs = dict(topic=self.get_parameter('force_command_topic').value,
+                      msg_type=sigma7_message,
+                      #msg_type=force_message,
                       qos_profile=DEFAULT_QOS)
         self.force_publisher = self.create_publisher(**kwargs)
         
     def initialize_subscriptions(self):
-        
-        # Initialize a subscription for the robot position.
-        kwargs = dict(topic='feedback/position',
-                      msg_type=position_message,
-                      callback=self.publish_cursor_position,
-                      qos_profile=DEFAULT_QOS)
-                      #rclpy.qos.QoSPresetProfiles.SENSOR_DATA.value)
-        self.create_subscription(**kwargs)
-        
-        # Initialize a subscription for the cursor force.
-        #kwargs = dict(topic='/cursor/force',
-        #              msg_type=force_message,
-        #              callback=self.publish_cursor_force,
+
+        # Initialize a subscription for the robot pose. If using older version of package, just acquires position.
+        #topic_type = pose_message
+        #cb_function = self.publish_cursor_pose()
+        #if self.get_parameter('use_nml_transforms_v1').value:
+        #    topic_type = position_message
+        #    cb_function = self.publish_cursor_position()
+        #kwargs = dict(topic=self.get_parameter('robot_pose_topic').value,
+        #              msg_type=topic_type,
+        #              callback=cb_function,
         #              qos_profile=DEFAULT_QOS)
-        #self.create_subscription(**kwargs)
-        
+        kwargs = dict(topic=self.get_parameter('robot_pose_topic').value,
+                      msg_type=pose_message,
+                      callback=self.publish_cursor_pose,
+                      qos_profile=DEFAULT_QOS)
+        self.create_subscription(**kwargs)
+
         # Instead of one topic listening to a force input and publishing the force command to the 
         # '/command/force' topic, we can use the summation of force inputs and update the 
         # corresponding force command with each change. Doing it this way, we can have a force command
         # from an attractor node, an independent force perturbation command, potentially a 3rd
         # input from object colisions, and others
         self.input_sub = []
-        #N_inputs = self.get_parameter('n_force_inputs').value
-        for i in range(self.N_inputs):
+        for i in range(self.get_parameter('n_force_inputs').value):
             def create_callback(idx):
                return lambda msg, idx = idx: self.input_force_cb(msg, idx)
                
@@ -123,8 +142,8 @@ class Node(rclpy.node.Node):
     def publish_cursor_position(self, position):
         
         # Record the current position.
-        self.current_effector_position = position
-        
+        self.current_pose = position
+
         # Convert the robot position to cursor position.
         p_r = numpy.array([position.x, position.y, position.z])
         t   = numpy.array(self.get_parameter('cursor.position_transform').value)
@@ -135,7 +154,34 @@ class Node(rclpy.node.Node):
         kwargs = dict(zip(['x', 'y', 'z'], p_c))
         message = position_message(**kwargs) #x=p_c[0], y=p_c[1], z=p_c[2])
         self.position_publisher.publish(message)
+
+
+    def publish_cursor_pose(self, pose):
+        """ Callback function for robot pose topic which also applies a transformation to the virtual agent's pose.
+        """
+        self.current_pose = pose
+
+        #self.logger("I got data")
+        if self.get_parameter('use_wrist_orientation').value:
+            # If the wrist orientation is requested, the transformations will use the pitch and yaw of the robot pose to drive movement in the y and z axes.
+            py = pose.orientation.y * self.get_parameter('cursor.angular_transform').value[1]
+            pz = pose.orientation.z * self.get_parameter('cursor.angular_transform').value[2]
+            p_r = numpy.array([pose.position.x, py, pz])
+        else:
+            # Convert the robot pose to cursor pose.
+            p_r = numpy.array([pose.position.x, pose.position.y, pose.position.z])
+
+        t   = numpy.array(self.get_parameter('cursor.position_transform').value)
+        T   = t.reshape((3, 3))
+        p_c = T @ p_r
         
+        # Publish the position.
+        kwargs = dict(zip(['x', 'y', 'z'], p_c))
+        message = position_message(**kwargs) #x=p_c[0], y=p_c[1], z=p_c[2])
+        self.position_publisher.publish(message)
+
+
+
     def input_force_cb(self, force, idx):
     
         # Update force data for input by index
@@ -191,10 +237,6 @@ class Node(rclpy.node.Node):
         
         # Return the result.
         return f_e.squeeze()
-        
-
-        
-    
 
 
 def main(args=None, Node=Node):
