@@ -25,6 +25,7 @@ setup(
             'wrist_manip_node = ros_nml_transforms.wrist_manip_node:main',
             'blocks_node = ros_nml_transforms.blocks_node:main',
             'rom_node = ros_nml_transforms.range_of_motion:main',
+            'stiffness_node = ros_nml_transforms.stiffness_node:main',
         ],
     },
 )

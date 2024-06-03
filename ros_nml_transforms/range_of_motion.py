@@ -782,6 +782,8 @@ class ROM(Node):
             with open(file_path, '+w') as f:
                 yaml.dump(data, f)
 
+            print(open(file_path).read())
+
         except Exception as e:
             self.logger(f"Error saving angles to YAML file: {e}")
 
@@ -1060,6 +1062,8 @@ class ROM(Node):
                     new_points[:,0] = radial_pos_points[:,0]
                     new_points[:,1] = radial_pos_points[:,2]
                     [p, r] = self.fit_circle_2d(new_points)
+                    print(r)
+                    print(type(r))
                     self.pose_data['radial']['center'] = [float(p[0]), self.pose_data['front']['pose'].position.y, float(p[1])]
                     self.pose_data['radial']['radius'] = float(r)
 
